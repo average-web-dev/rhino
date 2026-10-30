@@ -414,6 +414,7 @@ public final class NativeJSON extends ScriptableObject {
         }
 
         ArrayList<Object> partial = new ArrayList<>();
+        long size = 2;
 
         for (Object p : k) {
             Object strP = str(p, value, state);
@@ -422,6 +423,7 @@ public final class NativeJSON extends ScriptableObject {
                 if (state.gap.length() > 0) {
                     member = member + " ";
                 }
+                size = checkPartialSize(state, size, member.length() + strP.toString().length());
                 member = member + strP;
                 partial.add(member);
             }
@@ -482,8 +484,10 @@ public final class NativeJSON extends ScriptableObject {
         }
 
         long len = ((NativeArray) value).getLength();
+        long size = 2;
 
         for (long index = 0; index < len; index++) {
+            ScriptRuntime.addLoopIteration(state.cx);
             Object strP;
             if (index > Integer.MAX_VALUE) {
                 strP = str(Long.toString(index), value, state);
@@ -491,10 +495,10 @@ public final class NativeJSON extends ScriptableObject {
                 strP = str(Integer.valueOf((int) index), value, state);
             }
             if (strP == Undefined.instance) {
-                partial.add("null");
-            } else {
-                partial.add(strP);
+                strP = "null";
             }
+            size = checkPartialSize(state, size, strP.toString().length());
+            partial.add(strP);
         }
 
         final String finalValue;
@@ -514,6 +518,17 @@ public final class NativeJSON extends ScriptableObject {
         state.stack.pop();
         state.indent = stepback;
         return finalValue;
+    }
+
+    /**
+     * Adds an element of the given length (plus its separator) to the size of an object or array
+     * being serialized, and checks the result against the maximum string length.
+     */
+    private static long checkPartialSize(StringifyState state, long size, int elementLength) {
+        int separatorLength = state.gap.isEmpty() ? 1 : 2 + state.indent.length();
+        size += elementLength + separatorLength;
+        ScriptRuntime.checkStringLength(state.cx, size);
+        return size;
     }
 
     private static String quote(String string) {

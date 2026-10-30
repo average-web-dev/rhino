@@ -85,6 +85,13 @@ public class NativeArrayBuffer extends ScriptableObject {
         if (intLen < 0) {
             throw ScriptRuntime.rangeError("Negative array length " + len);
         }
+        Context cx = Context.getCurrentContext();
+        if (cx != null && intLen > cx.getMaximumArrayBufferLength()) {
+            throw ScriptRuntime.rangeErrorById(
+                    "msg.arraybuf.too.large",
+                    String.valueOf(intLen),
+                    String.valueOf(cx.getMaximumArrayBufferLength()));
+        }
         if (intLen == 0) {
             buffer = EMPTY_BUF;
         } else {

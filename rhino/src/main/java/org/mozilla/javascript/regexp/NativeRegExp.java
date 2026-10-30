@@ -4216,6 +4216,11 @@ public class NativeRegExp extends IdScriptableObject {
                                     replaceOps);
 
             if (position >= nextSourcePosition) {
+                ScriptRuntime.checkStringLength(
+                        cx,
+                        (long) accumulatedResult.length()
+                                + (position - nextSourcePosition)
+                                + replacementString.length());
                 accumulatedResult.append(s, nextSourcePosition, position);
                 accumulatedResult.append(replacementString);
                 nextSourcePosition = position + matchLength;
@@ -4225,6 +4230,8 @@ public class NativeRegExp extends IdScriptableObject {
         if (nextSourcePosition >= lengthS) {
             return accumulatedResult.toString();
         } else {
+            ScriptRuntime.checkStringLength(
+                    cx, (long) accumulatedResult.length() + (lengthS - nextSourcePosition));
             accumulatedResult.append(s.substring(nextSourcePosition));
             return accumulatedResult.toString();
         }
@@ -4333,6 +4340,11 @@ public class NativeRegExp extends IdScriptableObject {
                                     replaceOps);
 
             if (position >= nextSourcePosition) {
+                ScriptRuntime.checkStringLength(
+                        cx,
+                        (long) accumulatedResult.length()
+                                + (position - nextSourcePosition)
+                                + replacementString.length());
                 accumulatedResult.append(s, nextSourcePosition, position);
                 accumulatedResult.append(replacementString);
                 nextSourcePosition = position + matchLength;
@@ -4342,6 +4354,8 @@ public class NativeRegExp extends IdScriptableObject {
         if (nextSourcePosition >= lengthS) {
             return accumulatedResult.toString();
         } else {
+            ScriptRuntime.checkStringLength(
+                    cx, (long) accumulatedResult.length() + (lengthS - nextSourcePosition));
             accumulatedResult.append(s.substring(nextSourcePosition));
             return accumulatedResult.toString();
         }

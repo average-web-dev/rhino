@@ -3598,7 +3598,7 @@ public class ScriptRuntime {
         if (arg1 == null || Undefined.isUndefined(arg1)) {
             return ScriptRuntime.emptyArgs;
         } else if (arg1 instanceof Scriptable && isArrayLike((Scriptable) arg1)) {
-            return cx.getElements((Scriptable) arg1);
+            return getArgumentsFromArrayLike(cx, (Scriptable) arg1);
         } else if (arg1 instanceof ScriptableObject) {
             return ScriptRuntime.emptyArgs;
         } else {
@@ -4997,6 +4997,29 @@ public class ScriptRuntime {
         }
     }
 
+    /**
+     * Counts one iteration of a loop in a built-in function towards the instruction threshold, so
+     * that {@link Context#observeInstructionCount(int)} can interrupt built-ins whose running time
+     * is not bounded by the size of existing data (e.g. loops up to the {@code length} of an
+     * array-like object).
+     */
+    public static void addLoopIteration(Context cx) {
+        if (cx.instructionThreshold != 0) {
+            addInstructionCount(cx, 1);
+        }
+    }
+
+    /**
+     * Throws a RangeError if a string of the given length would exceed {@link
+     * Context#getMaximumStringLength()}.
+     */
+    public static void checkStringLength(Context cx, long length) {
+        int max = cx != null ? cx.getMaximumStringLength() : Integer.MAX_VALUE;
+        if (length > max) {
+            throw rangeErrorById("msg.string.too.long");
+        }
+    }
+
     public static void initScript(
             ScriptOrFn execObj,
             Scriptable thisObj,
@@ -5641,7 +5664,23 @@ public class ScriptRuntime {
             // arrays beyond  MAX_INT is not in Java in any case
             throw new IllegalArgumentException();
         }
-        int len = (int) longLen;
+        return getArrayElements(object, (int) longLen);
+    }
+
+    /**
+     * CreateListFromArrayLike for the arguments of a call, limited to {@link
+     * Context#getMaximumArgumentsLength()} elements.
+     */
+    private static Object[] getArgumentsFromArrayLike(Context cx, Scriptable object) {
+        long longLen = NativeArray.getLengthProperty(cx, object);
+        int max = cx.getMaximumArgumentsLength();
+        if (longLen > max) {
+            throw rangeErrorById("msg.too.many.args", String.valueOf(max));
+        }
+        return getArrayElements(object, (int) longLen);
+    }
+
+    private static Object[] getArrayElements(Scriptable object, int len) {
         if (len == 0) {
             return ScriptRuntime.emptyArgs;
         }

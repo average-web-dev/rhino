@@ -163,6 +163,7 @@ public class RegExpImpl implements RegExpProxy {
                     }
 
                     SubString rc = this.rightContext;
+                    ScriptRuntime.checkStringLength(cx, (long) data.charBuf.length() + rc.length);
                     data.charBuf.append(rc.str, rc.index, rc.index + rc.length);
                     return data.charBuf.toString();
                 }
@@ -359,7 +360,7 @@ public class RegExpImpl implements RegExpProxy {
             RegExpImpl reImpl,
             int leftIndex,
             int leftlen) {
-        int replen;
+        long replen;
         String lambdaStr;
         if (rdata.lambda != null) {
             // invoke lambda function with args lastMatch, $1, $2, ... $n,
@@ -414,8 +415,11 @@ public class RegExpImpl implements RegExpProxy {
             }
         }
 
-        int growth = leftlen + replen + reImpl.rightContext.length;
         StringBuilder charBuf = rdata.charBuf;
+        ScriptRuntime.checkStringLength(
+                cx, (charBuf == null ? 0 : (long) charBuf.length()) + leftlen + replen);
+        int growth =
+                (int) Math.min(Integer.MAX_VALUE, leftlen + replen + reImpl.rightContext.length);
         if (charBuf == null) {
             charBuf = new StringBuilder(growth);
             rdata.charBuf = charBuf;

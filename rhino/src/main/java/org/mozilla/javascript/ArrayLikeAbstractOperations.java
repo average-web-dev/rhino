@@ -171,6 +171,7 @@ public class ArrayLikeAbstractOperations {
                         ? -1
                         : +1;
         for (long i = start; i != end; i += increment) {
+            ScriptRuntime.addLoopIteration(cx);
             Object[] innerArgs = new Object[3];
             Object elem = getRawElem(o, i);
             if (elem == NOT_FOUND) {
@@ -347,6 +348,7 @@ public class ArrayLikeAbstractOperations {
         boolean movingLeft = operation == ReduceOperation.REDUCE;
         Object value = args.length > 1 ? args[1] : NOT_FOUND;
         for (long i = 0; i < length; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             long index = movingLeft ? i : (length - 1 - i);
             Object elem = getRawElem(o, index);
             if (elem == NOT_FOUND) {
