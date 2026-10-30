@@ -264,4 +264,103 @@ public class FunctionsRestParametersTest {
 
         Utils.assertEvaluatorExceptionES6("parameter after rest parameter (test#1)", code);
     }
+
+    @Test
+    public void restArgsViaApply() {
+        String code =
+                "function rest(...restArgs) {\n"
+                        + "  return JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "rest.apply(null, [1, 'abc', 2.5]);\n";
+
+        Utils.assertWithAllModes_ES6("[1,\"abc\",2.5]", code);
+    }
+
+    @Test
+    public void restArgsViaApplyActivation() {
+        String code =
+                "function rest(...restArgs) {\n"
+                        + "  try {\n"
+                        + "    return JSON.stringify(restArgs);\n"
+                        + "  } catch {}\n"
+                        + "}\n"
+                        + "rest.apply(null, [1, 'abc', 2.5]);\n";
+
+        Utils.assertWithAllModes_ES6("[1,\"abc\",2.5]", code);
+    }
+
+    @Test
+    public void restArgsViaApplyWithLeadingParams() {
+        String code =
+                "function rest(a, b, ...restArgs) {\n"
+                        + "  return a + '|' + b + '|' + JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "[rest.apply(null, [1, 2, 3, 4]), rest.apply(null, [1, 2]),"
+                        + " rest.apply(null, [1]), rest.apply(null)].join(' ');\n";
+
+        Utils.assertWithAllModes_ES6(
+                "1|2|[3,4] 1|2|[] 1|undefined|[] undefined|undefined|[]", code);
+    }
+
+    @Test
+    public void restArgsViaApplyArgumentsForwarding() {
+        String code =
+                "function rest(a, ...restArgs) {\n"
+                        + "  return a + '|' + JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "function fwd() {\n"
+                        + "  return rest.apply(this, arguments);\n"
+                        + "}\n"
+                        + "fwd(1, 2, 3);\n";
+
+        Utils.assertWithAllModes_ES6("1|[2,3]", code);
+    }
+
+    @Test
+    public void restArgsViaCall() {
+        String code =
+                "function rest(a, ...restArgs) {\n"
+                        + "  return a + '|' + JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "rest.call(null, 1, 2, 3);\n";
+
+        Utils.assertWithAllModes_ES6("1|[2,3]", code);
+    }
+
+    @Test
+    public void restArgsViaBind() {
+        String code =
+                "function rest(a, ...restArgs) {\n"
+                        + "  return a + '|' + JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "[rest.bind(null, 1)(2, 3), rest.bind(null, 1, 2)(3),"
+                        + " rest.bind(null, 1, 2, 3)(), rest.bind(null, 1).apply(null, [2, 3]),"
+                        + " rest.bind(null, 1).call(null, 2, 3)].join(' ');\n";
+
+        Utils.assertWithAllModes_ES6("1|[2,3] 1|[2,3] 1|[2,3] 1|[2,3] 1|[2,3]", code);
+    }
+
+    @Test
+    public void restArgsViaBindActivation() {
+        String code =
+                "function rest(a, ...restArgs) {\n"
+                        + "  try {\n"
+                        + "    return a + '|' + JSON.stringify(restArgs);\n"
+                        + "  } catch {}\n"
+                        + "}\n"
+                        + "[rest.bind(null, 1)(2, 3), rest.bind(null, 1).apply(null, [2, 3])].join(' ');\n";
+
+        Utils.assertWithAllModes_ES6("1|[2,3] 1|[2,3]", code);
+    }
+
+    @Test
+    public void restArgsViaReflectApply() {
+        String code =
+                "function rest(a, ...restArgs) {\n"
+                        + "  return a + '|' + JSON.stringify(restArgs);\n"
+                        + "}\n"
+                        + "Reflect.apply(rest, null, [1, 2, 3]);\n";
+
+        Utils.assertWithAllModes_ES6("1|[2,3]", code);
+    }
 }

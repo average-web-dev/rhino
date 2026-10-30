@@ -173,11 +173,20 @@ final class CallFrame extends ACallFrame<CallFrame, InterpreterData<?>> implemen
             if (argCount >= desc.getParamCount()) {
                 vals = new Object[argCount - offset];
 
-                argShift = argShift + offset;
-                for (int valsIdx = 0; valsIdx != vals.length; ++argShift, ++valsIdx) {
-                    Object val = args[argShift];
-                    if (val == UniqueTag.DOUBLE_MARK) {
-                        val = ScriptRuntime.wrapNumber(argsDbl[argShift]);
+                // Leading arguments may come from boundArgs (bind, or apply/call inlined
+                // by the interpreter), the remaining ones from args
+                int boundLen = boundArgs == null ? 0 : boundArgs.length;
+                for (int valsIdx = 0; valsIdx != vals.length; ++valsIdx) {
+                    int argIdx = offset + valsIdx;
+                    Object val;
+                    if (argIdx < boundLen) {
+                        val = boundArgs[argIdx];
+                    } else {
+                        int i = argShift + argIdx - boundLen;
+                        val = args[i];
+                        if (val == UniqueTag.DOUBLE_MARK) {
+                            val = ScriptRuntime.wrapNumber(argsDbl[i]);
+                        }
                     }
                     vals[valsIdx] = val;
                 }
