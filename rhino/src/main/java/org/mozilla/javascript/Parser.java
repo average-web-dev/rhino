@@ -486,6 +486,12 @@ public class Parser {
         return nestingOfFunction != 0;
     }
 
+    private boolean insideES6Generator() {
+        return insideFunctionBody()
+                && currentScriptOrFn instanceof FunctionNode
+                && ((FunctionNode) currentScriptOrFn).isES6Generator();
+    }
+
     boolean insideFunctionParams() {
         return nestingOfFunctionParams != 0;
     }
@@ -934,11 +940,12 @@ public class Parser {
     }
 
     private FunctionNode function(int type) throws IOException {
-        return function(type, false);
+        return function(type, false, false);
     }
 
-    private FunctionNode function(int type, boolean isMethodDefiniton) throws IOException {
-        boolean isGenerator = false;
+    private FunctionNode function(int type, boolean isMethodDefiniton, boolean isGeneratorMethod)
+            throws IOException {
+        boolean isGenerator = isGeneratorMethod;
         int syntheticType = type;
         int baseLineno = lineNumber(); // line number where source starts
         int functionSourceStart = ts.tokenBeg; // start of "function" kwd
@@ -1363,8 +1370,18 @@ public class Parser {
                 if (pn instanceof VariableDeclaration && peekToken() == Token.SEMI) break;
                 return pn;
 
-            case Token.RETURN:
             case Token.YIELD:
+                if (insideES6Generator()) {
+                    // yield is an AssignmentExpression here, so "yield a, b;" is a comma
+                    // expression
+                    lineno = ts.getLineno();
+                    column = ts.getTokenColumn();
+                    pn = new ExpressionStatement(expr(false), !insideFunctionBody());
+                    pn.setLineColumnNumber(lineno, column);
+                    break;
+                }
+            // fallthrough
+            case Token.RETURN:
                 pn = returnOrYield(tt, false);
                 break;
 
@@ -2134,9 +2151,18 @@ public class Parser {
             consumeToken();
         }
 
+        // In ES6 generators the operand of yield is an AssignmentExpression
+        boolean es6Yield = tt == Token.YIELD && insideES6Generator();
         AstNode e = null;
         // This is ugly, but we don't want to require a semicolon.
         switch (peekTokenOrEOL()) {
+            case Token.COMMA:
+            case Token.COLON:
+                // "f(yield, x)" and "c ? yield : x" have no operand
+                if (es6Yield && !yieldStar) break;
+                e = expr(false);
+                end = getNodeEnd(e);
+                break;
             case Token.SEMI:
             case Token.RC:
             case Token.RB:
@@ -2152,7 +2178,7 @@ public class Parser {
                 }
             // fallthrough
             default:
-                e = expr(false);
+                e = es6Yield ? assignExpr() : expr(false);
                 end = getNodeEnd(e);
         }
 
@@ -2530,7 +2556,8 @@ public class Parser {
             int opPos = ts.tokenBeg;
             if (compilerEnv.isStrictMode() && !pn.hasSideEffects())
                 addStrictWarning("msg.no.side.effects", "", pos, nodeEnd(pn) - pos);
-            if (peekToken() == Token.YIELD) reportError("msg.yield.parenthesized");
+            if (peekToken() == Token.YIELD && !insideES6Generator())
+                reportError("msg.yield.parenthesized");
             if (allowTrailingComma && peekToken() == Token.RP) {
                 pn.putIntProp(Node.TRAILING_COMMA, 1);
                 return pn;
@@ -2941,7 +2968,7 @@ public class Parser {
                     // Quick fix to handle scenario like f1(a,); but not f1(a,b
                     break;
                 }
-                if (peekToken() == Token.YIELD) {
+                if (peekToken() == Token.YIELD && !insideES6Generator()) {
                     reportError("msg.yield.parenthesized");
                 }
                 AstNode en = assignExpr();
@@ -4152,7 +4179,7 @@ public class Parser {
     private ObjectProperty methodDefinition(
             int pos, AstNode propName, int entryKind, boolean isGenerator, boolean isShorthand)
             throws IOException {
-        FunctionNode fn = function(FunctionNode.FUNCTION_EXPRESSION, true);
+        FunctionNode fn = function(FunctionNode.FUNCTION_EXPRESSION, true, isGenerator);
         // We've already parsed the function name, so fn should be anonymous.
         Name name = fn.getFunctionName();
         if (name != null && name.length() != 0) {
