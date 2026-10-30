@@ -722,6 +722,7 @@ public class NativeArray extends ScriptableObject implements List {
         final long length = getLengthProperty(cx, items);
         final Scriptable result = callConstructorOrCreateArray(cx, scope, thisObj, length, true);
         for (long k = 0; k < length; k++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object temp = getElem(cx, items, k);
             if (mapping) {
                 temp = mapFn.call(cx, scope, thisArg, new Object[] {temp, Long.valueOf(k)});
@@ -1019,7 +1020,8 @@ public class NativeArray extends ScriptableObject implements List {
                 boolean skipUndefinedAndNull =
                         !toSource || cx.getLanguageVersion() < Context.VERSION_1_5;
                 for (i = 0; i < length; i++) {
-                    if (i > 0) result.append(separator);
+                    ScriptRuntime.addLoopIteration(cx);
+                    if (i > 0) appendChecked(cx, result, separator);
                     Object elem = getRawElem(o, i);
                     if (elem == NOT_FOUND
                             || (skipUndefinedAndNull
@@ -1030,10 +1032,10 @@ public class NativeArray extends ScriptableObject implements List {
                     haslast = true;
 
                     if (toSource) {
-                        result.append(ScriptRuntime.uneval(cx, scope, elem));
+                        appendChecked(cx, result, ScriptRuntime.uneval(cx, scope, elem));
 
                     } else if (elem instanceof String) {
-                        result.append((String) elem);
+                        appendChecked(cx, result, (String) elem);
 
                     } else {
                         if (toLocale) {
@@ -1041,7 +1043,7 @@ public class NativeArray extends ScriptableObject implements List {
                                     ScriptRuntime.getPropAndThis(elem, "toLocaleString", cx, scope);
                             elem = fun.call(cx, scope, ScriptRuntime.emptyArgs);
                         }
-                        result.append(ScriptRuntime.toString(elem));
+                        appendChecked(cx, result, ScriptRuntime.toString(elem));
                     }
                 }
 
@@ -1083,15 +1085,16 @@ public class NativeArray extends ScriptableObject implements List {
             if (na.denseOnly) {
                 StringBuilder sb = new StringBuilder();
                 for (int i = 0; i < length; i++) {
+                    ScriptRuntime.addLoopIteration(cx);
                     if (i != 0) {
-                        sb.append(separator);
+                        appendChecked(cx, sb, separator);
                     }
                     if (i < na.dense.length) {
                         Object temp = na.dense[i];
                         if (temp != null
                                 && temp != Undefined.instance
                                 && temp != Scriptable.NOT_FOUND) {
-                            sb.append(ScriptRuntime.toString(temp));
+                            appendChecked(cx, sb, ScriptRuntime.toString(temp));
                         }
                     }
                 }
@@ -1101,29 +1104,23 @@ public class NativeArray extends ScriptableObject implements List {
         if (length == 0) {
             return "";
         }
-        String[] buf = new String[length];
-        int total_size = 0;
+        StringBuilder sb = new StringBuilder();
         for (int i = 0; i != length; i++) {
+            ScriptRuntime.addLoopIteration(cx);
+            if (i != 0) {
+                appendChecked(cx, sb, separator);
+            }
             Object temp = getElem(cx, o, i);
             if (temp != null && temp != Undefined.instance) {
-                String str = ScriptRuntime.toString(temp);
-                total_size += str.length();
-                buf[i] = str;
-            }
-        }
-        total_size += (length - 1) * separator.length();
-        StringBuilder sb = new StringBuilder(total_size);
-        for (int i = 0; i != length; i++) {
-            if (i != 0) {
-                sb.append(separator);
-            }
-            String str = buf[i];
-            if (str != null) {
-                // str == null for undefined or null
-                sb.append(str);
+                appendChecked(cx, sb, ScriptRuntime.toString(temp));
             }
         }
         return sb.toString();
+    }
+
+    private static void appendChecked(Context cx, StringBuilder sb, String str) {
+        ScriptRuntime.checkStringLength(cx, (long) sb.length() + str.length());
+        sb.append(str);
     }
 
     /** See ECMA 15.4.4.4 */
@@ -1146,6 +1143,7 @@ public class NativeArray extends ScriptableObject implements List {
 
         long half = len / 2;
         for (long i = 0; i < half; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             long j = len - i - 1;
             Object temp1 = getRawElem(o, i);
             Object temp2 = getRawElem(o, j);
@@ -1174,12 +1172,18 @@ public class NativeArray extends ScriptableObject implements List {
             throw Context.reportRuntimeErrorById(
                     "msg.arraylength.too.big", String.valueOf(llength));
         }
-        // copy the JS array into a working array, so it can be
-        // sorted cheaply.
-        final Object[] working = new Object[length];
+        // copy the elements of the JS array into a working array, so they can be
+        // sorted cheaply. Holes are skipped, so that the working array is no larger
+        // than the elements that actually exist.
+        ArrayList<Object> elements = new ArrayList<>();
         for (int i = 0; i != length; ++i) {
-            working[i] = getRawElem(o, i);
+            ScriptRuntime.addLoopIteration(cx);
+            Object elem = getRawElem(o, i);
+            if (elem != NOT_FOUND) {
+                elements.add(elem);
+            }
         }
+        final Object[] working = elements.toArray();
 
         // Java's 'Arrays.sort' is guaranteed to be stable so we can use it; however,
         // if the comparator is not consistent, it throws an IllegalArgumentException.
@@ -1191,9 +1195,14 @@ public class NativeArray extends ScriptableObject implements List {
             return o;
         }
 
-        // copy the working array back into thisObj
-        for (int i = 0; i < length; ++i) {
+        // copy the working array back into thisObj, and remove the holes at the end
+        for (int i = 0; i < working.length; ++i) {
+            ScriptRuntime.addLoopIteration(cx);
             setRawElem(cx, o, i, working[i]);
+        }
+        for (int i = working.length; i < length; ++i) {
+            ScriptRuntime.addLoopIteration(cx);
+            deleteElem(o, i);
         }
 
         return o;
@@ -1295,6 +1304,7 @@ public class NativeArray extends ScriptableObject implements List {
              */
             if (length > 0) {
                 for (i = 1; i <= length; i++) {
+                    ScriptRuntime.addLoopIteration(cx);
                     Object temp = getRawElem(o, i);
                     setRawElem(cx, o, i - 1, temp);
                 }
@@ -1334,6 +1344,7 @@ public class NativeArray extends ScriptableObject implements List {
             /*  Slide up the array to make room for args at the bottom */
             if (length > 0) {
                 for (long last = length - 1; last >= 0; last--) {
+                    ScriptRuntime.addLoopIteration(cx);
                     Object temp = getRawElem(o, last);
                     setRawElem(cx, o, last + argc, temp);
                 }
@@ -1432,6 +1443,7 @@ public class NativeArray extends ScriptableObject implements List {
                     }
                 } else {
                     for (long last = begin; last != end; last++) {
+                        ScriptRuntime.addLoopIteration(cx);
                         Object temp = getRawElem(o, last);
                         if (temp != NOT_FOUND) {
                             ArrayLikeAbstractOperations.defineElem(
@@ -1468,11 +1480,13 @@ public class NativeArray extends ScriptableObject implements List {
 
         if (delta > 0) {
             for (long last = length - 1; last >= end; last--) {
+                ScriptRuntime.addLoopIteration(cx);
                 Object temp = getRawElem(o, last);
                 setRawElem(cx, o, last + delta, temp);
             }
         } else if (delta < 0) {
             for (long last = end; last < length; last++) {
+                ScriptRuntime.addLoopIteration(cx);
                 Object temp = getRawElem(o, last);
                 setRawElem(cx, o, last + delta, temp);
             }
@@ -1481,6 +1495,7 @@ public class NativeArray extends ScriptableObject implements List {
             // deleting elements "in the middle". This makes us compatible
             // with older Rhino releases.
             for (long k = length - 1; k >= length + delta; --k) {
+                ScriptRuntime.addLoopIteration(cx);
                 deleteElem(o, k);
             }
         }
@@ -1554,6 +1569,7 @@ public class NativeArray extends ScriptableObject implements List {
         // If we get here then we have to do things the generic way
         long dstpos = offset;
         for (long srcpos = 0; srcpos < srclen; srcpos++, dstpos++) {
+            ScriptRuntime.addLoopIteration(cx);
             final Object temp = getRawElem(arg, srcpos);
             if (temp != Scriptable.NOT_FOUND) {
                 ArrayLikeAbstractOperations.defineElem(cx, result, dstpos, temp);
@@ -1619,6 +1635,7 @@ public class NativeArray extends ScriptableObject implements List {
 
         Scriptable result = ArrayLikeAbstractOperations.arraySpeciesCreate(cx, scope, o, 0);
         for (long slot = begin; slot < end; slot++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object temp = getRawElem(o, slot);
             if (temp != NOT_FOUND) {
                 ArrayLikeAbstractOperations.defineElem(cx, result, slot - begin, temp);
@@ -1674,6 +1691,7 @@ public class NativeArray extends ScriptableObject implements List {
             }
         }
         for (long i = start; i < length; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object val = getRawElem(o, i);
             if (val != NOT_FOUND && ScriptRuntime.shallowEq(val, compareTo)) {
                 return Long.valueOf(i);
@@ -1726,6 +1744,7 @@ public class NativeArray extends ScriptableObject implements List {
             }
         }
         for (long i = start; i >= 0; i--) {
+            ScriptRuntime.addLoopIteration(cx);
             Object val = getRawElem(o, i);
             if (val != NOT_FOUND && ScriptRuntime.shallowEq(val, compareTo)) {
                 return Long.valueOf(i);
@@ -1777,6 +1796,7 @@ public class NativeArray extends ScriptableObject implements List {
             }
         }
         for (; k < len; k++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object elementK = getRawElem(o, k);
             if (elementK == NOT_FOUND) {
                 elementK = Undefined.instance;
@@ -1816,6 +1836,7 @@ public class NativeArray extends ScriptableObject implements List {
 
         Object value = args.length > 0 ? args[0] : Undefined.instance;
         for (long i = k; i < fin; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             setRawElem(cx, thisObj, i, value);
         }
 
@@ -1880,6 +1901,7 @@ public class NativeArray extends ScriptableObject implements List {
         }
 
         for (; count > 0; count--) {
+            ScriptRuntime.addLoopIteration(cx);
             final Object temp = getRawElem(o, from);
             if ((temp == Scriptable.NOT_FOUND) || Undefined.isUndefined(temp)) {
                 deleteElem(o, to);
@@ -1928,6 +1950,7 @@ public class NativeArray extends ScriptableObject implements List {
         result = ArrayLikeAbstractOperations.arraySpeciesCreate(cx, scope, source, 0);
         long j = 0;
         for (long i = 0; i < length; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object elem = getRawElem(source, i);
             if (elem == Scriptable.NOT_FOUND) {
                 continue;
@@ -1936,6 +1959,7 @@ public class NativeArray extends ScriptableObject implements List {
                 Scriptable arr = flat(cx, scope, (Scriptable) elem, depth - 1);
                 long arrLength = getLengthProperty(cx, arr);
                 for (long k = 0; k < arrLength; k++) {
+                    ScriptRuntime.addLoopIteration(cx);
                     Object temp = getRawElem(arr, k);
                     defineElemOrThrow(cx, result, j++, temp);
                 }
@@ -1966,6 +1990,7 @@ public class NativeArray extends ScriptableObject implements List {
         Scriptable result = ArrayLikeAbstractOperations.arraySpeciesCreate(cx, scope, o, 0);
         long j = 0;
         for (long i = 0; i < length; i++) {
+            ScriptRuntime.addLoopIteration(cx);
             Object elem = getRawElem(o, i);
             if (elem == Scriptable.NOT_FOUND) {
                 continue;
@@ -1976,6 +2001,7 @@ public class NativeArray extends ScriptableObject implements List {
                 Scriptable arr = (Scriptable) mapCall;
                 long arrLength = getLengthProperty(cx, arr);
                 for (long k = 0; k < arrLength; k++) {
+                    ScriptRuntime.addLoopIteration(cx);
                     Object temp = getRawElem(arr, k);
                     defineElemOrThrow(cx, result, j++, temp);
                 }
@@ -2163,6 +2189,7 @@ public class NativeArray extends ScriptableObject implements List {
         Scriptable result = cx.newArray(scope, (int) len);
 
         for (int k = 0; k < len; ++k) {
+            ScriptRuntime.addLoopIteration(cx);
             Object fromValue = getElem(cx, source, k);
             setElem(cx, result, k, fromValue);
         }
@@ -2183,6 +2210,7 @@ public class NativeArray extends ScriptableObject implements List {
         Scriptable result = cx.newArray(scope, (int) len);
 
         for (int k = 0; k < len; ++k) {
+            ScriptRuntime.addLoopIteration(cx);
             int from = (int) len - k - 1;
             Object fromValue = getElem(cx, source, from);
             setElem(cx, result, k, fromValue);
@@ -2229,6 +2257,7 @@ public class NativeArray extends ScriptableObject implements List {
         long r = actualStart + actualSkipCount;
 
         while (i < actualStart) {
+            ScriptRuntime.addLoopIteration(cx);
             Object e = getElem(cx, source, i);
             setElem(cx, result, i, e);
             i++;
@@ -2240,6 +2269,7 @@ public class NativeArray extends ScriptableObject implements List {
         }
 
         while (i < newLen) {
+            ScriptRuntime.addLoopIteration(cx);
             Object e = getElem(cx, source, r);
             setElem(cx, result, i, e);
             i++;
@@ -2266,6 +2296,7 @@ public class NativeArray extends ScriptableObject implements List {
 
         Scriptable result = cx.newArray(scope, (int) len);
         for (long k = 0; k < len; ++k) {
+            ScriptRuntime.addLoopIteration(cx);
             Object value;
             if (k == actualIndex) {
                 value = args.length > 1 ? args[1] : Undefined.instance;

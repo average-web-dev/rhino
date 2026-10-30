@@ -2144,6 +2144,91 @@ public class Context implements Closeable {
     }
 
     /**
+     * Returns the maximum length (in UTF-16 code units) of a string created by script code. String
+     * concatenation and built-ins such as {@code String.prototype.repeat}, {@code
+     * Array.prototype.join} or {@code JSON.stringify} throw a {@code RangeError} instead of
+     * creating a longer string. Defaults to Integer.MAX_VALUE.
+     *
+     * @return The current maximum string length.
+     */
+    public final int getMaximumStringLength() {
+        return maximumStringLength;
+    }
+
+    /**
+     * Sets the maximum length (in UTF-16 code units) of a string created by script code. String
+     * concatenation and built-ins such as {@code String.prototype.repeat}, {@code
+     * Array.prototype.join} or {@code JSON.stringify} throw a {@code RangeError} instead of
+     * creating a longer string, so that a script cannot exhaust the heap with a few operations.
+     * Defaults to Integer.MAX_VALUE.
+     *
+     * @param max the new maximum string length
+     * @throws IllegalArgumentException if the new length is negative
+     */
+    public final void setMaximumStringLength(int max) {
+        if (sealed) onSealedMutation();
+        if (max < 0) {
+            throw new IllegalArgumentException("Cannot set maximumStringLength to less than 0");
+        }
+        maximumStringLength = max;
+    }
+
+    /**
+     * Returns the maximum size in bytes of an {@code ArrayBuffer} (including the buffers created
+     * for typed arrays). Defaults to Integer.MAX_VALUE.
+     *
+     * @return The current maximum buffer size.
+     */
+    public final int getMaximumArrayBufferLength() {
+        return maximumArrayBufferLength;
+    }
+
+    /**
+     * Sets the maximum size in bytes of an {@code ArrayBuffer} (including the buffers created for
+     * typed arrays). Creating a larger buffer throws a {@code RangeError}. Defaults to
+     * Integer.MAX_VALUE.
+     *
+     * @param max the new maximum buffer size
+     * @throws IllegalArgumentException if the new size is negative
+     */
+    public final void setMaximumArrayBufferLength(int max) {
+        if (sealed) onSealedMutation();
+        if (max < 0) {
+            throw new IllegalArgumentException(
+                    "Cannot set maximumArrayBufferLength to less than 0");
+        }
+        maximumArrayBufferLength = max;
+    }
+
+    /**
+     * Returns the maximum number of arguments that {@code Function.prototype.apply}, {@code
+     * Reflect.apply} and {@code Reflect.construct} read from an array-like object. Defaults to
+     * Integer.MAX_VALUE.
+     *
+     * @return The current maximum number of arguments.
+     */
+    public final int getMaximumArgumentsLength() {
+        return maximumArgumentsLength;
+    }
+
+    /**
+     * Sets the maximum number of arguments that {@code Function.prototype.apply}, {@code
+     * Reflect.apply} and {@code Reflect.construct} read from an array-like object. A larger array
+     * throws a {@code RangeError}, instead of allocating an argument array for its whole {@code
+     * length}. Defaults to Integer.MAX_VALUE.
+     *
+     * @param max the new maximum number of arguments
+     * @throws IllegalArgumentException if the new number is negative
+     */
+    public final void setMaximumArgumentsLength(int max) {
+        if (sealed) onSealedMutation();
+        if (max < 0) {
+            throw new IllegalArgumentException("Cannot set maximumArgumentsLength to less than 0");
+        }
+        maximumArgumentsLength = max;
+    }
+
+    /**
      * Set the security controller for this context.
      *
      * <p>SecurityController may only be set if it is currently null and {@link
@@ -2877,6 +2962,9 @@ public class Context implements Closeable {
     boolean useDynamicScope;
     private boolean interpretedMode;
     private int maximumInterpreterStackDepth;
+    private int maximumStringLength = Integer.MAX_VALUE;
+    private int maximumArrayBufferLength = Integer.MAX_VALUE;
+    private int maximumArgumentsLength = Integer.MAX_VALUE;
     private WrapFactory wrapFactory;
     Debugger debugger;
     private Object debuggerData;

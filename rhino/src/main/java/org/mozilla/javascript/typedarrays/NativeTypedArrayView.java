@@ -618,7 +618,9 @@ public abstract class NativeTypedArrayView<T> extends NativeArrayBufferView
         for (int i = 1; i < self.length; i++) {
             builder.append(',');
             Object elem = self.getElemForToString(cx, scope, i, useLocale);
-            builder.append(ScriptRuntime.toString(elem));
+            String str = ScriptRuntime.toString(elem);
+            ScriptRuntime.checkStringLength(cx, (long) builder.length() + str.length());
+            builder.append(str);
         }
         return builder.toString();
     }
@@ -920,7 +922,7 @@ public abstract class NativeTypedArrayView<T> extends NativeArrayBufferView
             return "";
         }
         String[] buf = new String[(int) len];
-        int total_size = 0;
+        long total_size = 0;
         for (int i = 0; i != len; i++) {
             Object temp = self.js_get(i);
             if (temp != null && temp != Undefined.instance) {
@@ -929,8 +931,9 @@ public abstract class NativeTypedArrayView<T> extends NativeArrayBufferView
                 buf[i] = str;
             }
         }
-        total_size += ((int) len - 1) * separator.length();
-        StringBuilder sb = new StringBuilder(total_size);
+        total_size += (len - 1) * separator.length();
+        ScriptRuntime.checkStringLength(cx, total_size);
+        StringBuilder sb = new StringBuilder((int) total_size);
         for (int i = 0; i != len; i++) {
             if (i != 0) {
                 sb.append(separator);

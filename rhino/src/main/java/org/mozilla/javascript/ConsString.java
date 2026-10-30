@@ -40,9 +40,11 @@ public class ConsString implements CharSequence, Serializable {
         if (!(str2 instanceof String) && !(str2 instanceof ConsString)) {
             str2 = str2.toString();
         }
+        long newLength = (long) str1.length() + str2.length();
+        ScriptRuntime.checkStringLength(Context.getCurrentContext(), newLength);
         left = str1;
         right = str2;
-        length = left.length() + right.length();
+        length = (int) newLength;
         isFlat = false;
     }
 

@@ -126,8 +126,10 @@ public class AbstractEcmaStringOperations {
         if (position > str.length()) Kit.codeBug();
         StringBuilder result = new StringBuilder();
         for (var op : replacementTemplate) {
-            result.append(
-                    op.replacement(cx, scope, matched, str, position, capturesList, namedCaptures));
+            String part =
+                    op.replacement(cx, scope, matched, str, position, capturesList, namedCaptures);
+            ScriptRuntime.checkStringLength(cx, (long) result.length() + part.length());
+            result.append(part);
         }
         return result.toString();
     }
