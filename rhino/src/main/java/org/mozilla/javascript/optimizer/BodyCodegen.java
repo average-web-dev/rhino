@@ -995,7 +995,9 @@ class BodyCodegen {
                         OptFunctionNode target;
                         target = (OptFunctionNode) node.getProp(Node.DIRECTCALL_PROP);
 
-                        if (target != null) {
+                        // The direct call path generates the arguments twice, so it can't
+                        // contain a yield.
+                        if (target != null && !(isGenerator && findNestedYield(node) != null)) {
                             visitOptimizedCall(node, target, type, child);
                         } else if (type == Token.CALL) {
                             visitStandardCall(node, child);
@@ -1763,6 +1765,33 @@ class BodyCodegen {
                         + ")Lorg/mozilla/javascript/Ref;");
     }
 
+    /**
+     * A yield saves the operand stack as an Object[] and restores the entries as Object. If a yield
+     * can happen while the arguments of a call are generated, cast the stack entries below the
+     * argument array back to the types the following invoke expects.
+     *
+     * @param types the types of the entries below the argument array, from the bottom up
+     */
+    private void castStackBelowArgsAfterYield(Node call, String... types) {
+        if (!isGenerator || findNestedYield(call) == null) {
+            return;
+        }
+        short argsArray = getNewWordLocal();
+        cfw.addAStore(argsArray);
+        short[] entries = new short[types.length];
+        for (int i = types.length - 1; i >= 0; i--) {
+            entries[i] = getNewWordLocal();
+            cfw.addAStore(entries[i]);
+        }
+        for (int i = 0; i < types.length; i++) {
+            cfw.addALoad(entries[i]);
+            cfw.add(ByteCode.CHECKCAST, types[i]);
+            releaseWordLocal(entries[i]);
+        }
+        cfw.addALoad(argsArray);
+        releaseWordLocal(argsArray);
+    }
+
     // Descend down the tree and return the first child that represents a yield
     // point, or null.
     private Node findNestedYield(Node node) {
@@ -2261,12 +2290,31 @@ class BodyCodegen {
         // Process each element
         int childIdx = 0;
         while (child != null) {
+            // A yield restores the stack as plain Objects, so generate such an element first
+            // and cast the storage back afterwards
+            boolean elementYields =
+                    isGenerator
+                            && (child.getType() == Token.YIELD
+                                    || child.getType() == Token.YIELD_STAR
+                                    || findNestedYield(child) != null);
             if (child.getType() == Token.DOTDOTDOT) {
                 // Handle spread element: push the expression and call spread
-                cfw.add(ByteCode.DUP);
-                cfw.addALoad(contextLocal);
-                cfw.addALoad(variableObjectLocal);
-                generateExpression(child.getFirstChild(), node);
+                if (elementYields) {
+                    generateExpression(child.getFirstChild(), node);
+                    short value = getNewWordLocal();
+                    cfw.addAStore(value);
+                    cfw.add(ByteCode.CHECKCAST, "org/mozilla/javascript/NewLiteralStorage");
+                    cfw.add(ByteCode.DUP);
+                    cfw.addALoad(contextLocal);
+                    cfw.addALoad(variableObjectLocal);
+                    cfw.addALoad(value);
+                    releaseWordLocal(value);
+                } else {
+                    cfw.add(ByteCode.DUP);
+                    cfw.addALoad(contextLocal);
+                    cfw.addALoad(variableObjectLocal);
+                    generateExpression(child.getFirstChild(), node);
+                }
                 // Push source position (0 if no skip indexes)
                 if (skipIndexes != null) {
                     cfw.addLoadConstant(sourcePositions[childIdx]);
@@ -2284,8 +2332,18 @@ class BodyCodegen {
                                 + ")V");
             } else {
                 // Handle regular element: push the value
-                cfw.add(ByteCode.DUP);
-                generateExpression(child, node);
+                if (elementYields) {
+                    generateExpression(child, node);
+                    short value = getNewWordLocal();
+                    cfw.addAStore(value);
+                    cfw.add(ByteCode.CHECKCAST, "org/mozilla/javascript/NewLiteralStorage");
+                    cfw.add(ByteCode.DUP);
+                    cfw.addALoad(value);
+                    releaseWordLocal(value);
+                } else {
+                    cfw.add(ByteCode.DUP);
+                    generateExpression(child, node);
+                }
                 cfw.addInvoke(
                         ByteCode.INVOKEVIRTUAL,
                         "org/mozilla/javascript/NewLiteralStorage",
@@ -2364,13 +2422,16 @@ class BodyCodegen {
 
             for (int i = 0; i < count; ++i) {
                 if (child.getType() == Token.DOTDOTDOT) {
+                    // generate the source first, it may contain a yield
+                    generateExpression(child.getFirstChild(), node); // stack: [sourceObj]
+                    short source = getNewWordLocal();
+                    cfw.addAStore(source); // stack: []
                     cfw.addALoad(contextLocal); // stack: [context]
                     cfw.addALoad(variableObjectLocal); // stack: [context, scope]
-                    generateExpression(
-                            child.getFirstChild(), node); // stack: [context, scope, sourceObj]
-                    cfw.addALoad(local); // stack: [context, scope, sourceObj, store]
+                    cfw.addALoad(local); // stack: [context, scope, store]
                     cfw.add(ByteCode.CHECKCAST, "org/mozilla/javascript/NewLiteralStorage");
-                    cfw.add(ByteCode.SWAP); // stack: [context, scope, store, sourceObj]
+                    cfw.addALoad(source); // stack: [context, scope, store, sourceObj]
+                    releaseWordLocal(source);
                     cfw.addLoadConstant(0); // sourcePosition (unused for objects)
                     addOptRuntimeInvoke(
                             "spread",
@@ -2591,6 +2652,7 @@ class BodyCodegen {
         generateExpression(child, node);
         child = child.getNext();
         generateCallArgArray(node, child, false);
+        castStackBelowArgsAfterYield(node, "org/mozilla/javascript/Context", "java/lang/Object");
         cfw.addALoad(variableObjectLocal);
         cfw.addPush(specialType);
 
@@ -2610,6 +2672,11 @@ class BodyCodegen {
         // stack: ... cx functionObj thisObj
         child = child.getNext();
         generateCallArgArray(node, child, false);
+        castStackBelowArgsAfterYield(
+                node,
+                "org/mozilla/javascript/Context",
+                "org/mozilla/javascript/Callable",
+                "org/mozilla/javascript/Scriptable");
         cfw.addALoad(variableObjectLocal);
         cfw.addALoad(thisObjLocal);
         cfw.addPush(specialType);
@@ -2654,6 +2721,11 @@ class BodyCodegen {
 
         child = child.getNext();
         generateCallArgArray(node, child, false);
+        castStackBelowArgsAfterYield(
+                node,
+                "org/mozilla/javascript/Context",
+                "org/mozilla/javascript/Callable",
+                "org/mozilla/javascript/Scriptable");
         cfw.addALoad(variableObjectLocal);
         cfw.addALoad(thisObjLocal);
         cfw.addPush(specialType);
@@ -2764,6 +2836,11 @@ class BodyCodegen {
         cfw.addALoad(variableObjectLocal);
         // stack: ... functionObj cx scope
         generateCallArgArray(node, firstArgChild, false);
+        castStackBelowArgsAfterYield(
+                node,
+                "java/lang/Object",
+                "org/mozilla/javascript/Context",
+                "org/mozilla/javascript/Scriptable");
         addScriptRuntimeInvoke(
                 "newObject",
                 "(Ljava/lang/Object;"
