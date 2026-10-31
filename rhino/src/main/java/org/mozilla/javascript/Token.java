@@ -245,7 +245,13 @@ public class Token {
             DOTDOTDOT = TAGGED_TEMPLATE_LITERAL + 1, // spread/rest ...
             NULLISH_COALESCING = DOTDOTDOT + 1, // nullish coalescing (??)
             QUESTION_DOT = NULLISH_COALESCING + 1, // optional chaining operator (?.)
-            LAST_TOKEN = QUESTION_DOT + 1;
+            // Closes the iterator of a for-of loop (IteratorClose) if it is not done yet. The
+            // enumeration is in the register of the LOCAL_BLOCK in LOCAL_BLOCK_PROP. The
+            // ON_THROW variant is used when the loop is left by an exception and ignores errors
+            // from the iterator's return method.
+            ENUM_CLOSE = QUESTION_DOT + 1,
+            ENUM_CLOSE_ON_THROW = ENUM_CLOSE + 1,
+            LAST_TOKEN = ENUM_CLOSE_ON_THROW + 1;
 
     /**
      * Returns a name for the token. If Rhino is compiled with certain hardcoded debugging flags in
@@ -614,6 +620,10 @@ public class Token {
                 return "SETCONST";
             case SETCONSTVAR:
                 return "SETCONSTVAR";
+            case ENUM_CLOSE:
+                return "ENUM_CLOSE";
+            case ENUM_CLOSE_ON_THROW:
+                return "ENUM_CLOSE_ON_THROW";
             case ARRAYCOMP:
                 return "ARRAYCOMP";
             case WITHEXPR:

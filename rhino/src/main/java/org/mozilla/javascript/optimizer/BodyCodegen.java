@@ -670,10 +670,10 @@ class BodyCodegen {
                     boolean prevLocal = inLocalBlock;
                     inLocalBlock = true;
                     int local = getNewWordLocal();
-                    if (isGenerator) {
-                        cfw.add(ByteCode.ACONST_NULL);
-                        cfw.addAStore(local);
-                    }
+                    // Generators save the local, and the handlers that close the iterator of a
+                    // for-of loop read it even if the loop failed before it was set
+                    cfw.add(ByteCode.ACONST_NULL);
+                    cfw.addAStore(local);
                     node.putIntProp(Node.LOCAL_PROP, local);
                     while (child != null) {
                         generateStatement(child);
@@ -832,6 +832,16 @@ class BodyCodegen {
                                 + "I"
                                 + ")Ljava/lang/Object;");
                 cfw.addAStore(getLocalBlockRegister(node));
+                break;
+
+            case Token.ENUM_CLOSE:
+            case Token.ENUM_CLOSE_ON_THROW:
+                cfw.addALoad(getLocalBlockRegister(node));
+                cfw.addALoad(contextLocal);
+                cfw.addPush(type == Token.ENUM_CLOSE_ON_THROW);
+                addScriptRuntimeInvoke(
+                        "enumClose",
+                        "(Ljava/lang/Object;" + "Lorg/mozilla/javascript/Context;" + "Z" + ")V");
                 break;
 
             case Token.EXPR_VOID:

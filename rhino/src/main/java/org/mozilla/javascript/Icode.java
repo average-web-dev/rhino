@@ -165,8 +165,12 @@ abstract class Icode {
             // spread
             Icode_SPREAD = Icode_DELPROP_SUPER - 1,
 
+            // close the iterator of a for-of loop
+            Icode_ENUM_CLOSE = Icode_SPREAD - 1,
+            Icode_ENUM_CLOSE_ON_THROW = Icode_ENUM_CLOSE - 1,
+
             // Last icode
-            MIN_ICODE = Icode_SPREAD;
+            MIN_ICODE = Icode_ENUM_CLOSE_ON_THROW;
 
     static String bytecodeName(int bytecode) {
         if (!validBytecode(bytecode)) {
@@ -320,6 +324,10 @@ abstract class Icode {
                 return "SETCONSTVAR";
             case Icode_SETCONSTVAR1:
                 return "SETCONSTVAR1";
+            case Icode_ENUM_CLOSE:
+                return "ENUM_CLOSE";
+            case Icode_ENUM_CLOSE_ON_THROW:
+                return "ENUM_CLOSE_ON_THROW";
             case Icode_GENERATOR:
                 return "GENERATOR";
             case Icode_GENERATOR_END:
