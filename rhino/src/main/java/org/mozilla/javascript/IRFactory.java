@@ -613,11 +613,75 @@ public final class IRFactory {
             Node lhs = transform(iter);
             Node obj = transform(loop.getIteratedObject());
             Node body = transform(loop.getBody());
-            return createForIn(
-                    declType, loop, lhs, obj, body, loop, loop.isForEach(), loop.isForOf());
+            Node forIn =
+                    createForIn(
+                            declType, loop, lhs, obj, body, loop, loop.isForEach(), loop.isForOf());
+            if (forIn != null && loop.isForOf()) {
+                addIteratorClose(forIn, loop.getLineno(), loop.getColumn());
+            }
+            return forIn;
         } finally {
             parser.popScope();
         }
+    }
+
+    /**
+     * Closes the iterator of a for-of loop when the loop is left early, by wrapping the loop in
+     *
+     * <pre>
+     * try {
+     *     loop
+     * } catch (e) {
+     *     ENUM_CLOSE_ON_THROW; // ignores errors from return()
+     *     throw e;
+     * } finally {
+     *     ENUM_CLOSE; // does nothing if the iterator is done or was closed already
+     * }
+     * </pre>
+     *
+     * The catch has no binding, so it needs no activation, and an error from next() does not close
+     * the iterator, because the enumeration counts as done during the call.
+     *
+     * @param localBlock the LOCAL_BLOCK returned by {@link #createForIn}, which holds the
+     *     enumeration and contains only the loop
+     */
+    private static void addIteratorClose(Node localBlock, int lineno, int column) {
+        Node loop = localBlock.getFirstChild();
+        localBlock.removeChild(loop);
+
+        Node handlerBlock = new Node(Token.LOCAL_BLOCK);
+        Jump tryNode = new Jump(Token.TRY, loop);
+        tryNode.setLineColumnNumber(lineno, column);
+        tryNode.putProp(Node.LOCAL_BLOCK_PROP, handlerBlock);
+
+        Node endCatch = Node.newTarget();
+        tryNode.addChildToBack(makeJump(Token.GOTO, endCatch));
+        Node catchTarget = Node.newTarget();
+        tryNode.target = catchTarget;
+        tryNode.addChildToBack(catchTarget);
+        Node closeOnThrow = new Node(Token.ENUM_CLOSE_ON_THROW);
+        closeOnThrow.putProp(Node.LOCAL_BLOCK_PROP, localBlock);
+        tryNode.addChildToBack(closeOnThrow);
+        Node rethrow = new Node(Token.RETHROW);
+        rethrow.putProp(Node.LOCAL_BLOCK_PROP, handlerBlock);
+        tryNode.addChildToBack(rethrow);
+        tryNode.addChildToBack(endCatch);
+
+        Node finallyTarget = Node.newTarget();
+        tryNode.setFinally(finallyTarget);
+        tryNode.addChildToBack(makeJump(Token.JSR, finallyTarget));
+        Node finallyEnd = Node.newTarget();
+        tryNode.addChildToBack(makeJump(Token.GOTO, finallyEnd));
+        tryNode.addChildToBack(finallyTarget);
+        Node close = new Node(Token.ENUM_CLOSE);
+        close.putProp(Node.LOCAL_BLOCK_PROP, localBlock);
+        Node finallyBlock = new Node(Token.FINALLY, new Node(Token.BLOCK, close));
+        finallyBlock.putProp(Node.LOCAL_BLOCK_PROP, handlerBlock);
+        tryNode.addChildToBack(finallyBlock);
+        tryNode.addChildToBack(finallyEnd);
+
+        handlerBlock.addChildToBack(tryNode);
+        localBlock.addChildToBack(handlerBlock);
     }
 
     private Node transformForLoop(ForLoop loop) {

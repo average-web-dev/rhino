@@ -2659,6 +2659,12 @@ public class ScriptRuntime {
 
         Scriptable iterator;
 
+        // for-of: the next method, read once when the iterator is created
+        Object nextMethod;
+        // for-of: true while the iterator must not be closed, because it is exhausted, was
+        // closed already or is in the middle of a next() call
+        boolean iteratorDone;
+
         private void readObject(ObjectInputStream stream)
                 throws IOException, ClassNotFoundException {
             Context.checkDeserializationEnabled();
@@ -2771,6 +2777,7 @@ public class ScriptRuntime {
             throw typeErrorById("msg.not.iterable", toString(x.obj));
         }
         x.iterator = (Scriptable) v;
+        x.nextMethod = ScriptableObject.getProperty(x.iterator, ES6Iterator.NEXT_METHOD);
         return x;
     }
 
@@ -2840,7 +2847,9 @@ public class ScriptRuntime {
     }
 
     private static Boolean enumNextInOrder(IdEnumeration enumObj, Context cx) {
-        Object v = ScriptableObject.getProperty(enumObj.iterator, ES6Iterator.NEXT_METHOD);
+        // An error from next() or from reading the result must not close the iterator
+        enumObj.iteratorDone = true;
+        Object v = enumObj.nextMethod;
         if (!(v instanceof Callable)) {
             throw notFunctionError(enumObj.iterator, ES6Iterator.NEXT_METHOD);
         }
@@ -2859,7 +2868,60 @@ public class ScriptRuntime {
         }
         enumObj.currentId =
                 ScriptableObject.getProperty(iteratorResult, ES6Iterator.VALUE_PROPERTY);
+        enumObj.iteratorDone = false;
         return Boolean.TRUE;
+    }
+
+    /**
+     * Closes the iterator of a for-of loop that is left before the iterator is done, see
+     * IteratorClose in ECMA 262.
+     *
+     * @param onThrow whether the loop is left by an exception. Then errors from the return method
+     *     are ignored, so that the original exception is thrown.
+     */
+    public static void enumClose(Object enumObj, Context cx, boolean onThrow) {
+        if (!(enumObj instanceof IdEnumeration)) {
+            return;
+        }
+        IdEnumeration x = (IdEnumeration) enumObj;
+        if (x.enumType != ENUMERATE_VALUES_IN_ORDER || x.iterator == null || x.iteratorDone) {
+            return;
+        }
+        x.iteratorDone = true;
+        if (onThrow) {
+            try {
+                callIteratorReturn(x.iterator, cx);
+            } catch (RhinoException e) {
+                // the exception that left the loop wins
+            }
+            return;
+        }
+        Object result = callIteratorReturn(x.iterator, cx);
+        if (result != Scriptable.NOT_FOUND && !(result instanceof Scriptable)) {
+            throw typeErrorById("msg.arg.not.object", typeof(result));
+        }
+    }
+
+    /**
+     * Calls the return method of an iterator and returns its result, or {@link
+     * Scriptable#NOT_FOUND} if the iterator has no return method.
+     */
+    private static Object callIteratorReturn(Scriptable iterator, Context cx) {
+        Object method = ScriptableObject.getProperty(iterator, ES6Iterator.RETURN_METHOD);
+        if (method == Scriptable.NOT_FOUND || method == null || Undefined.isUndefined(method)) {
+            return Scriptable.NOT_FOUND;
+        }
+        if (!(method instanceof Callable)) {
+            throw notFunctionError(iterator, method, ES6Iterator.RETURN_METHOD);
+        }
+        Callable f = (Callable) method;
+        Scriptable scope;
+        if (f instanceof Function) {
+            scope = ((Function) f).getDeclarationScope();
+        } else {
+            scope = cx.topCallScope;
+        }
+        return f.call(cx, scope, iterator, emptyArgs);
     }
 
     public static Object enumId(Object enumObj, Context cx) {

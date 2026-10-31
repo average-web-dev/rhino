@@ -1788,6 +1788,8 @@ public final class Interpreter extends Icode implements Evaluator {
         instructionObjs[base + Token.ENUM_INIT_VALUES_IN_ORDER] = new DoEnumInit();
         instructionObjs[base + Token.ENUM_NEXT] = new DoEnumOp();
         instructionObjs[base + Token.ENUM_ID] = new DoEnumOp();
+        instructionObjs[base + Icode_ENUM_CLOSE] = new DoEnumClose();
+        instructionObjs[base + Icode_ENUM_CLOSE_ON_THROW] = new DoEnumClose();
         instructionObjs[base + Token.REF_SPECIAL] = new DoRefSpecial();
         instructionObjs[base + Token.REF_MEMBER] = new DoRefMember();
         instructionObjs[base + Token.REF_NS_MEMBER] = new DoRefNsMember();
@@ -4302,6 +4304,16 @@ public final class Interpreter extends Icode implements Evaluator {
                     (op == Token.ENUM_NEXT)
                             ? ScriptRuntime.enumNext(val, cx)
                             : ScriptRuntime.enumId(val, cx);
+            return null;
+        }
+    }
+
+    private static class DoEnumClose extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            state.indexReg += frame.idata.itsMaxVars;
+            ScriptRuntime.enumClose(
+                    frame.stack[state.indexReg], cx, op == Icode_ENUM_CLOSE_ON_THROW);
             return null;
         }
     }
