@@ -770,6 +770,8 @@ public final class Interpreter extends AInterpreter<CallFrame, InterpreterData<?
         instructionObjs[base + Token.ENUM_INIT_VALUES_IN_ORDER] = new DoEnumInit();
         instructionObjs[base + Token.ENUM_NEXT] = new DoEnumOp();
         instructionObjs[base + Token.ENUM_ID] = new DoEnumOp();
+        instructionObjs[base + Icode.ENUM_CLOSE] = new DoEnumClose();
+        instructionObjs[base + Icode.ENUM_CLOSE_ON_THROW] = new DoEnumClose();
         instructionObjs[base + Token.REF_SPECIAL] = new DoRefSpecial();
         instructionObjs[base + Token.REF_MEMBER] = new DoRefMember();
         instructionObjs[base + Token.REF_NS_MEMBER] = new DoRefNsMember();
@@ -3540,6 +3542,16 @@ public final class Interpreter extends AInterpreter<CallFrame, InterpreterData<?
                     (op == Token.ENUM_NEXT)
                             ? ScriptRuntime.enumNext(val, cx)
                             : ScriptRuntime.enumId(val, cx);
+            return null;
+        }
+    }
+
+    private static class DoEnumClose extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            state.indexReg += frame.compilerData.maxVars;
+            ScriptRuntime.enumClose(
+                    frame.stack[state.indexReg], cx, op == Icode.ENUM_CLOSE_ON_THROW);
             return null;
         }
     }

@@ -178,8 +178,12 @@ abstract class Icode {
             // replace the current block scope with a copy of itself
             SCOPE_REPLACE = RESETVAR - 1,
 
+            // close the iterator of a for-of loop
+            ENUM_CLOSE = SCOPE_REPLACE - 1,
+            ENUM_CLOSE_ON_THROW = ENUM_CLOSE - 1,
+
             // Last icode
-            MIN_ICODE = SCOPE_REPLACE;
+            MIN_ICODE = ENUM_CLOSE_ON_THROW;
 
     static String bytecodeName(int bytecode) {
         if (!validBytecode(bytecode)) {
@@ -339,6 +343,10 @@ abstract class Icode {
                 return "RESETVAR";
             case SCOPE_REPLACE:
                 return "SCOPE_REPLACE";
+            case ENUM_CLOSE:
+                return "ENUM_CLOSE";
+            case ENUM_CLOSE_ON_THROW:
+                return "ENUM_CLOSE_ON_THROW";
             case GENERATOR:
                 return "GENERATOR";
             case GENERATOR_END:

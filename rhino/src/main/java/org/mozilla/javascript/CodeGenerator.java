@@ -587,6 +587,14 @@ class CodeGenerator<T extends ScriptOrFn<T>> {
                 stackChange(-1);
                 break;
 
+            case Token.ENUM_CLOSE:
+                addIndexOp(Icode.ENUM_CLOSE, getLocalBlockRef(node));
+                break;
+
+            case Token.ENUM_CLOSE_ON_THROW:
+                addIndexOp(Icode.ENUM_CLOSE_ON_THROW, getLocalBlockRef(node));
+                break;
+
             case Icode.GENERATOR:
                 break;
 
